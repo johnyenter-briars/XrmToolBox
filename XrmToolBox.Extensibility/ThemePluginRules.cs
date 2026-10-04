@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 
 namespace XrmToolBox.Extensibility
@@ -28,6 +29,7 @@ namespace XrmToolBox.Extensibility
                     new[]
                     {
                         For<Scintilla>(ApplySqlEditorTheme),
+                        For<StatusStrip>(ApplySqlStatusStripTheme),
                     }
                 },
                 {
@@ -47,7 +49,10 @@ namespace XrmToolBox.Extensibility
                 }
             };
 
-        public static void Apply(Control control, CustomTheme theme)
+        private static readonly ConditionalWeakTable<StatusStrip, SqlStatusAccent> SqlStatusAccents =
+            new ConditionalWeakTable<StatusStrip, SqlStatusAccent>();
+
+        public static void Apply(Control control, CustomTheme theme, Color originalBackColor)
         {
             // All hosted grids need readable cells; plugin rules only add exceptions.
             if (control is DataGridView grid)
@@ -63,6 +68,13 @@ namespace XrmToolBox.Extensibility
                 !RulesByPluginCompany.TryGetValue(pluginCompany, out var rules))
             {
                 return;
+            }
+
+            if (pluginCompany.Equals(Sql4CdsCompany, StringComparison.OrdinalIgnoreCase) &&
+                control is StatusStrip statusStrip &&
+                !SqlStatusAccents.TryGetValue(statusStrip, out _))
+            {
+                SqlStatusAccents.Add(statusStrip, new SqlStatusAccent { Color = originalBackColor });
             }
 
             foreach (var rule in rules)
@@ -98,6 +110,62 @@ namespace XrmToolBox.Extensibility
         {
             grid.BorderStyle = BorderStyle.None;
             grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        }
+
+        private static void ApplySqlStatusStripTheme(StatusStrip strip, CustomTheme theme)
+        {
+            // SQL 4 CDS restores its environment color when the connection changes.
+            strip.BackColorChanged -= SqlStatusStripColorChanged;
+            strip.BackColorChanged += SqlStatusStripColorChanged;
+            strip.ForeColorChanged -= SqlStatusStripColorChanged;
+            strip.ForeColorChanged += SqlStatusStripColorChanged;
+            strip.Paint -= PaintSqlStatusAccent;
+            strip.Paint += PaintSqlStatusAccent;
+            strip.BackColor = theme.Background2;
+            strip.ForeColor = theme.ForeColor2;
+        }
+
+        private static void SqlStatusStripColorChanged(object sender, EventArgs e)
+        {
+            var theme = CustomTheme.Instance;
+            if (!theme.IsActive || !(sender is StatusStrip strip))
+            {
+                return;
+            }
+
+            if (strip.BackColor != theme.Background2)
+            {
+                if (SqlStatusAccents.TryGetValue(strip, out var accent))
+                {
+                    accent.Color = strip.BackColor;
+                }
+                strip.BackColor = theme.Background2;
+                strip.Invalidate();
+            }
+
+            if (strip.ForeColor != theme.ForeColor2)
+            {
+                strip.ForeColor = theme.ForeColor2;
+            }
+        }
+
+        private static void PaintSqlStatusAccent(object sender, PaintEventArgs e)
+        {
+            if (!(sender is StatusStrip strip) ||
+                !SqlStatusAccents.TryGetValue(strip, out var accent))
+            {
+                return;
+            }
+
+            using (var brush = new SolidBrush(accent.Color))
+            {
+                e.Graphics.FillRectangle(brush, 0, strip.Height - 2, strip.Width, 2);
+            }
+        }
+
+        private sealed class SqlStatusAccent
+        {
+            public Color Color;
         }
 
         private static void ApplyPropertyGridTheme(PropertyGrid grid, CustomTheme theme)

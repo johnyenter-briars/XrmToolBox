@@ -11,6 +11,7 @@ namespace XrmToolBox.Extensibility
         private Color MenuBackground;
         private Color MenuItemBackground;
         private Color MenuItemSelectedBackground;
+        private Color StatusBackground;
 
         public DarkProfessionalColors(CustomTheme theme)
         {
@@ -18,6 +19,7 @@ namespace XrmToolBox.Extensibility
             MenuBackground = theme.Background1;
             MenuItemBackground = theme.Background1;
             MenuItemSelectedBackground = theme.HighlightColor;
+            StatusBackground = theme.Background2;
             LightColor = theme.ForeColor1;
         }
 
@@ -82,8 +84,8 @@ namespace XrmToolBox.Extensibility
         public override Color RaftingContainerGradientEnd => MenuBackground;
         public override Color SeparatorDark => LightColor;
         public override Color SeparatorLight => MenuBackground;
-        public override Color StatusStripGradientBegin => MenuBackground;
-        public override Color StatusStripGradientEnd => MenuBackground;
+        public override Color StatusStripGradientBegin => StatusBackground;
+        public override Color StatusStripGradientEnd => StatusBackground;
         public override Color ToolStripBorder => Background;
 
         public override Color ToolStripContentPanelGradientBegin => MenuBackground;

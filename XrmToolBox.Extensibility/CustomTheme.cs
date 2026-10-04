@@ -62,11 +62,15 @@ namespace XrmToolBox.Extensibility
 
         private void UpdateControlTree(Control control)
         {
+            var originalBackColor = control.BackColor;
             control.ForeColor = ForeColor1;
-            control.BackColor = Background1;
+            if (!(control is StatusStrip))
+            {
+                control.BackColor = Background1;
+            }
 
             // Specialized rules fill the gaps left by standard WinForms colors.
-            ThemePluginRules.Apply(control, this);
+            ThemePluginRules.Apply(control, this, originalBackColor);
 
             if (control is TextBox || control is ComboBox || control is RichTextBox)
             {
@@ -98,10 +102,14 @@ namespace XrmToolBox.Extensibility
                 richTextBox.ForeColor = ForeColor1;
             }
 
+            if (control is TabPage tabPage)
+            {
+                tabPage.UseVisualStyleBackColor = false;
+            }
+
             if (control is ToolStrip toolStrip)
             {
-                toolStrip.Renderer = new ToolStripProfessionalRenderer(MenuColorTable);
-                UpdateDropdownItemsTheme(toolStrip.Items);
+                ApplyToolStripTheme(toolStrip);
             }
 
             foreach (Control childControl in control.Controls)
@@ -110,34 +118,90 @@ namespace XrmToolBox.Extensibility
             }
         }
 
-        private void UpdateDropdownItemsTheme(ToolStripItemCollection items)
+        private void ApplyToolStripTheme(ToolStrip strip)
         {
-            foreach (ToolStripItem item in items)
+            strip.BackColor = strip is StatusStrip ? Background2 : Background1;
+            strip.ForeColor = ForeColor2;
+            if (!(strip.Renderer is ThemedToolStripRenderer renderer) || !renderer.UsesPalette(this))
             {
-                item.ForeColor = ForeColor1;
-                item.BackColor = Background1;
+                strip.Renderer = new ThemedToolStripRenderer(this);
+            }
 
-                if (item is ToolStripMenuItem menuItem)
-                {
-                    UpdateDropdownItemsTheme(menuItem.DropDownItems);
-                }
+            // Connection menus rebuild their items on opening, outside ControlAdded.
+            strip.ItemAdded -= ToolStripItemAdded;
+            strip.ItemAdded += ToolStripItemAdded;
+            foreach (ToolStripItem item in strip.Items)
+            {
+                UpdateDropdownItemTheme(item);
+            }
+        }
 
-                if (item is ToolStripTextBox textBox)
-                {
-                    textBox.TextBox.BackColor = Background2;
-                    textBox.TextBox.ForeColor = ForeColor2;
-                }
+        private static void ToolStripItemAdded(object sender, ToolStripItemEventArgs e)
+        {
+            if (Instance.IsActive)
+            {
+                Instance.UpdateDropdownItemTheme(e.Item);
+            }
+        }
 
-                if (item is ToolStripComboBox comboBox)
-                {
-                    comboBox.ComboBox.BackColor = Background2;
-                    comboBox.ComboBox.ForeColor = ForeColor2;
-                }
+        private void UpdateDropdownItemTheme(ToolStripItem item)
+        {
+            item.ForeColor = ForeColor1;
+            item.BackColor = item.Owner is StatusStrip ? Background2 : Background1;
 
-                if (item is ToolStripDropDownButton dropDownButton)
-                {
-                    UpdateDropdownItemsTheme(dropDownButton.DropDownItems);
-                }
+            if (item is ToolStripTextBox textBox)
+            {
+                textBox.TextBox.BackColor = Background2;
+                textBox.TextBox.ForeColor = ForeColor2;
+            }
+
+            if (item is ToolStripComboBox comboBox)
+            {
+                comboBox.ComboBox.BackColor = Background2;
+                comboBox.ComboBox.ForeColor = ForeColor2;
+            }
+
+            if (item is ToolStripDropDownItem dropDownItem)
+            {
+                // Accessing DropDown creates it. Theme only the menu being opened,
+                // rather than constructing every nested menu during ItemAdded/layout.
+                dropDownItem.DropDownOpened -= ToolStripDropDownOpened;
+                dropDownItem.DropDownOpened += ToolStripDropDownOpened;
+            }
+        }
+
+        private static void ToolStripDropDownOpened(object sender, System.EventArgs e)
+        {
+            if (Instance.IsActive && sender is ToolStripDropDownItem item)
+            {
+                Instance.ApplyToolStripTheme(item.DropDown);
+            }
+        }
+
+        private sealed class ThemedToolStripRenderer : ToolStripProfessionalRenderer
+        {
+            private readonly CustomTheme palette;
+
+            public ThemedToolStripRenderer(CustomTheme palette) : base(palette.MenuColorTable)
+            {
+                this.palette = palette;
+            }
+
+            public bool UsesPalette(CustomTheme candidate)
+            {
+                return ReferenceEquals(palette, candidate);
+            }
+
+            protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+            {
+                e.TextColor = e.Item.Selected || e.Item.Pressed ? palette.ForeColor5 : palette.ForeColor1;
+                base.OnRenderItemText(e);
+            }
+
+            protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
+            {
+                e.ArrowColor = e.Item.Enabled ? palette.ForeColor1 : palette.Background5;
+                base.OnRenderArrow(e);
             }
         }
     }
