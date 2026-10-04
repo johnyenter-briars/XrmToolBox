@@ -677,7 +677,21 @@ namespace XrmToolBox.New
             }
 
             int myOffSet = 0;
-            if (e.Item.Selected)
+            // Tool branding colors are intended for light backgrounds. The active
+            // application palette takes precedence in both list sizes and searches.
+            if (CustomTheme.Instance.IsActive)
+            {
+                var palette = CustomTheme.Instance;
+                backColor = e.Item.Selected ? palette.HighlightColor : palette.Background2;
+                primaryColor = e.Item.Selected ? palette.ForeColor5 : palette.ForeColor1;
+                secondaryColor = e.Item.Selected ? palette.ForeColor5 : palette.ForeColor2;
+                using (var background = new SolidBrush(backColor))
+                {
+                    e.Graphics.FillRectangle(background, new Rectangle(e.Bounds.X, e.Bounds.Y,
+                        e.Bounds.Width, e.Bounds.Height - 4));
+                }
+            }
+            else if (e.Item.Selected)
             {
                 if (Options.Instance.DoNotUseToolColors)
                 {
@@ -703,7 +717,7 @@ namespace XrmToolBox.New
                 e.Graphics.FillRectangle(new SolidBrush(backColor), new Rectangle(new Point(e.Bounds.X, e.Bounds.Y), new Size(e.Bounds.Width, e.Bounds.Height - 4)));
             }
 
-            if (Options.Instance.DoNotUseToolColors)
+            if (Options.Instance.DoNotUseToolColors && !CustomTheme.Instance.IsActive)
             {
                 e.Graphics.DrawLine(new Pen(new SolidBrush(Color.LightGray)), e.Bounds.X, e.Bounds.Y + e.Bounds.Height - 1, e.Bounds.X + e.Bounds.Width, e.Bounds.Y + e.Bounds.Height - 1);
             }
