@@ -7,6 +7,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using WeifenLuo.WinFormsUI.Docking;
@@ -463,6 +464,7 @@ namespace XrmToolBox.New
 
             if (!state.Cycling)
             {
+                state.RememberActiveFocus();
                 state.Cycling = true;
                 state.Index = state.Documents.IndexOf(panel.ActiveDocument as DockContent);
                 if (state.Index < 0)
@@ -494,7 +496,9 @@ namespace XrmToolBox.New
             state.HideSwitcher();
             if (selected != null && !selected.IsDisposed)
             {
+                var focusTarget = state.GetRememberedFocus(selected);
                 selected.Activate();
+                state.RestoreFocus(selected, focusTarget);
             }
         }
 
@@ -511,15 +515,25 @@ namespace XrmToolBox.New
 
         private sealed class SwitcherState
         {
+            [DllImport("user32.dll")]
+            private static extern IntPtr GetFocus();
+
             private readonly DockPanel panel;
+            private readonly Dictionary<DockContent, Control> rememberedFocus = new Dictionary<DockContent, Control>();
+            private readonly Dictionary<DockContent, HashSet<Control>> watchedControls = new Dictionary<DockContent, HashSet<Control>>();
+            private readonly Dictionary<Control, DockContent> controlOwners = new Dictionary<Control, DockContent>();
             private MruTabSwitcherWindow window;
+            private DockContent lastActiveDocument;
 
             public SwitcherState(DockPanel panel)
             {
                 this.panel = panel;
                 panel.ActiveContentChanged += Panel_ActiveContentChanged;
                 RefreshDocuments();
-                Record(panel.ActiveContent as DockContent);
+                lastActiveDocument = panel.ActiveDocument as DockContent;
+                WatchDocument(lastActiveDocument);
+                RememberFocusedDescendant(lastActiveDocument);
+                Record(lastActiveDocument);
             }
 
             public List<DockContent> Documents { get; } = new List<DockContent>();
@@ -528,9 +542,13 @@ namespace XrmToolBox.New
 
             private void Panel_ActiveContentChanged(object sender, System.EventArgs e)
             {
+                RememberFocusedDescendant(lastActiveDocument);
+                lastActiveDocument = panel.ActiveDocument as DockContent;
+                WatchDocument(lastActiveDocument);
+                RememberFocusedDescendant(lastActiveDocument);
                 if (!Cycling)
                 {
-                    Record(panel.ActiveContent as DockContent);
+                    Record(lastActiveDocument);
                 }
             }
 
@@ -550,14 +568,172 @@ namespace XrmToolBox.New
                 var open = panel.Documents.OfType<DockContent>()
                     .Where(document => !document.IsDisposed && document.DockState == DockState.Document)
                     .ToList();
+                var closed = Documents.Where(document => !open.Contains(document)).ToList();
                 Documents.RemoveAll(document => !open.Contains(document));
+                foreach (var document in closed)
+                {
+                    UnwatchDocument(document);
+                }
+
                 foreach (var document in open)
                 {
                     if (!Documents.Contains(document))
                     {
                         Documents.Add(document);
                     }
+
+                    WatchDocument(document);
                 }
+            }
+
+            public void RememberActiveFocus()
+            {
+                RememberFocusedDescendant(panel.ActiveDocument as DockContent);
+            }
+
+            private void WatchDocument(DockContent document)
+            {
+                if (document == null || document.IsDisposed || watchedControls.ContainsKey(document))
+                {
+                    return;
+                }
+
+                watchedControls[document] = new HashSet<Control>();
+                WatchControlTree(document, document);
+            }
+
+            private void WatchControlTree(Control control, DockContent document)
+            {
+                if (!watchedControls[document].Add(control))
+                {
+                    return;
+                }
+
+                controlOwners[control] = document;
+                control.GotFocus += Control_GotFocus;
+                control.ControlAdded += Control_ControlAdded;
+                foreach (Control child in control.Controls)
+                {
+                    WatchControlTree(child, document);
+                }
+            }
+
+            private void Control_ControlAdded(object sender, ControlEventArgs e)
+            {
+                if (sender is Control parent && controlOwners.TryGetValue(parent, out var document) &&
+                    !document.IsDisposed)
+                {
+                    WatchControlTree(e.Control, document);
+                }
+            }
+
+            private void Control_GotFocus(object sender, System.EventArgs e)
+            {
+                if (sender is Control control && controlOwners.TryGetValue(control, out var document) &&
+                    !document.IsDisposed)
+                {
+                    rememberedFocus[document] = control;
+                }
+            }
+
+            private void RememberFocusedDescendant(DockContent document)
+            {
+                if (document == null || document.IsDisposed)
+                {
+                    return;
+                }
+
+                var focusedWindow = Control.FromChildHandle(GetFocus());
+                var focused = IsWithinDocument(document, focusedWindow)
+                    ? focusedWindow : FindFocusedControl(document);
+                if (focused != null)
+                {
+                    rememberedFocus[document] = focused;
+                }
+            }
+
+            private static bool IsWithinDocument(DockContent document, Control control)
+            {
+                for (var current = control; current != null; current = current.Parent)
+                {
+                    if (ReferenceEquals(current, document))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            private static Control FindFocusedControl(Control parent)
+            {
+                if (parent.Focused)
+                {
+                    return parent;
+                }
+
+                foreach (Control child in parent.Controls)
+                {
+                    var focused = FindFocusedControl(child);
+                    if (focused != null)
+                    {
+                        return focused;
+                    }
+                }
+
+                return null;
+            }
+
+            public Control GetRememberedFocus(DockContent document)
+            {
+                if (rememberedFocus.TryGetValue(document, out var control) && !control.IsDisposed)
+                {
+                    return control;
+                }
+
+                return null;
+            }
+
+            public void RestoreFocus(DockContent document, Control control)
+            {
+                if (control == null || control.IsDisposed)
+                {
+                    return;
+                }
+
+                try
+                {
+                    document.BeginInvoke((MethodInvoker)(() =>
+                    {
+                        if (!document.IsDisposed && !control.IsDisposed && control.Visible &&
+                            control.Enabled && control.CanFocus)
+                        {
+                            control.Focus();
+                        }
+                    }));
+                }
+                catch (InvalidOperationException)
+                {
+                    // The content may close before the deferred focus restore runs.
+                }
+            }
+
+            private void UnwatchDocument(DockContent document)
+            {
+                if (!watchedControls.TryGetValue(document, out var controls))
+                {
+                    return;
+                }
+
+                foreach (var control in controls)
+                {
+                    control.GotFocus -= Control_GotFocus;
+                    control.ControlAdded -= Control_ControlAdded;
+                    controlOwners.Remove(control);
+                }
+
+                watchedControls.Remove(document);
+                rememberedFocus.Remove(document);
             }
 
             public void ShowSwitcher()
