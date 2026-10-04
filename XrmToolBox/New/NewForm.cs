@@ -74,6 +74,7 @@ namespace XrmToolBox.New
             SetStyle(ControlStyles.AllPaintingInWmPaint, true);
 
             SetTheme();
+            MruTabSwitcher.Track(dpMain);
             dpMain.Theme.Extender.FloatWindowFactory = new CustomFloatWindowFactory();
 
             // Connection Management
@@ -2202,6 +2203,16 @@ Would you like to reinstall last stable release of connection controls?";
 
         #region Key Shortcuts
 
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (Options.Instance.CycleTabsInRecentlyUsedOrder && MruTabSwitcher.HandleShortcut(dpMain, keyData))
+            {
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
         private void NewForm_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Control && e.Shift && e.KeyCode == Keys.C)
@@ -2221,6 +2232,11 @@ Would you like to reinstall last stable release of connection controls?";
 
         private void NewForm_KeyUp(object sender, KeyEventArgs e)
         {
+            if (!e.Control)
+            {
+                MruTabSwitcher.Complete(dpMain);
+            }
+
             if (!(e.Control && e.Shift && e.KeyCode == Keys.C))
             {
                 ((dpMain.ActiveContent as PluginForm)?.Control as IShortcutReceiver)?.ReceiveKeyUpShortcut(e);

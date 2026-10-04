@@ -466,6 +466,11 @@ namespace XrmToolBox
         [Browsable(false)]
         public bool DisplayRecentlyUpdatedFirst { get; set; }
 
+        [Category("Display")]
+        [DisplayName("Cycle tabs in recently used order")]
+        [Description("Use Ctrl+Tab to show and cycle through open tabs in most recently used order")]
+        public bool CycleTabsInRecentlyUsedOrder { get; set; }
+
         [Browsable(false)]
         public string Theme { get; set; } = "Light theme";
 
@@ -733,6 +738,7 @@ namespace XrmToolBox
                 CheckUpdateOnStartup = CheckUpdateOnStartup,
                 DisplayLargeIcons = DisplayLargeIcons,
                 DisplayMostUsedFirst = DisplayMostUsedFirst,
+                CycleTabsInRecentlyUsedOrder = CycleTabsInRecentlyUsedOrder,
                 ShowConnectionFileNameInMru = ShowConnectionFileNameInMru,
                 DisplayRecentlyUpdatedFirst = DisplayRecentlyUpdatedFirst,
                 MostUsedList = MostUsedList,
