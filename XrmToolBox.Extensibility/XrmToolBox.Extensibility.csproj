@@ -90,6 +90,7 @@
     <Compile Include="CustomTheme.cs" />
     <Compile Include="DrawExtensions.cs" />
     <Compile Include="ThemePluginRules.cs" />
+    <Compile Include="NativeControlTheme.cs" />
     <Compile Include="Extensions.cs">
       <SubType>Code</SubType>
     </Compile>

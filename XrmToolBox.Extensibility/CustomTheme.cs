@@ -112,6 +112,8 @@ namespace XrmToolBox.Extensibility
                 ApplyToolStripTheme(toolStrip);
             }
 
+            NativeControlTheme.Apply(control, this);
+
             foreach (Control childControl in control.Controls)
             {
                 UpdateControlTree(childControl);
